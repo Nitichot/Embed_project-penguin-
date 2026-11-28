@@ -21,6 +21,7 @@
 #include "adc.h"
 #include "dac.h"
 #include "dma.h"
+#include "app_fatfs.h"
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
@@ -28,7 +29,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "app_fatfs.h"
+#include "st7735.h"
+#include <string.h>
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -49,7 +53,23 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+/* ตัวแปรเช็ก SD Card */
+FATFS fs;
+FIL fil;
+FRESULT fres_mount = 99;
+FRESULT fres_open  = 99;
+UINT bytes_read    = 0;
+char sd_buffer[64];
 
+/* ตัวแปรเช็กหน้าจอ 2 จอ */
+volatile uint8_t lcd_status = 0;
+/* ตารางเก็บคลื่น Sine Wave 32 จุด (ที่ 16kHz จะได้เสียงความถี่ 500 Hz) */
+uint16_t sine_table[32];
+volatile uint8_t sine_idx = 0;
+
+/* ตัวแปรสำหรับดูค่าเสียงจากไมโครโฟนใน Live Expressions */
+volatile uint16_t mic_raw = 0;      // ค่าดิบจาก ADC (0 - 4095) เงียบๆ จะอยู่แถว ~2048
+volatile uint16_t mic_peak = 0;     // ความดังสูงสุดตอนพูดใส่ไมค์ (0 - 2048)
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -60,7 +80,16 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+/* ฟังก์ชันนี้จะถูกเรียกอัตโนมัติทุกๆ 1/16000 วินาที เพื่อส่งคลื่น Sine ออกขา PA6 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM6)
+    {
+        HAL_DAC_SetValue(&hdac2, DAC_CHANNEL_1, DAC_ALIGN_12B_R, sine_table[sine_idx]);
+        sine_idx++;
+        if (sine_idx >= 32) sine_idx = 0;
+    }
+}
 /* USER CODE END 0 */
 
 /**
@@ -101,8 +130,54 @@ int main(void)
   MX_TIM4_Init();
   MX_USART1_UART_Init();
   MX_TIM8_Init();
+  if (MX_FATFS_Init() != APP_OK) {
+    Error_Handler();
+  }
+  MX_TIM6_Init();
+  MX_ADC5_Init();
   /* USER CODE BEGIN 2 */
+  HAL_Delay(500); // รอไฟเลี้ยงอุปกรณ์ทุกชิ้นนิ่ง
 
+  /* --- 1. ทดสอบอ่านไฟล์ test.txt จาก SD Card (SPI2) --- */
+  memset(sd_buffer, 0, sizeof(sd_buffer));
+  fres_mount = f_mount(&fs, "", 1);
+  if (fres_mount == FR_OK) {
+      fres_open = f_open(&fil, "test.txt", FA_READ);
+      if (fres_open == FR_OK) {
+          f_read(&fil, sd_buffer, sizeof(sd_buffer) - 1, &bytes_read);
+          f_close(&fil);
+      }
+  }
+
+  /* --- 2. ทดสอบแสดงผลบนหน้าจอคู่ ST7735 ทั้ง 2 จอ (SPI3) --- */
+  lcd_status = 1; // เริ่มต้น Init จอ
+  ST7735_Init(1); // จอซ้าย
+  ST7735_Init(2); // จอขวา
+
+  lcd_status = 2; // เคลียร์พื้นหลังสีดำทั้ง 2 จอ
+  ST7735_FillScreen(1, ST7735_BLACK);
+  ST7735_FillScreen(2, ST7735_BLACK);
+
+  /* วาดตาเพนกวิน: จอซ้ายสีฟ้า / จอขวาสีเหลือง */
+  ST7735_FillRoundRect(1, 34, 24, 60, 80, 18, ST7735_CYAN);
+  ST7735_FillRoundRect(2, 34, 24, 60, 80, 18, ST7735_YELLOW);
+
+  /* จุดสีเขียวมุมซ้ายบนของจอที่ 1 = อ่าน SD Card สำเร็จ / จุดสีแดง = อ่านไม่ได้ */
+  if (fres_mount == FR_OK) {
+      ST7735_FillCircle(1, 12, 12, 6, ST7735_GREEN);
+  } else {
+      ST7735_FillCircle(1, 12, 12, 6, ST7735_RED);
+  }
+
+  lcd_status = 3; // ทำงานครบทุกขั้นตอนสมบูรณ์
+  // สร้างตารางคลื่น Sine 12-bit (ค่าแกว่งระหว่าง 0 ถึง 4095 กึ่งกลางที่ 2048)
+  for (int i = 0; i < 32; i++) {
+      sine_table[i] = (uint16_t)(2048.0f + 1800.0f * sinf(2.0f * 3.1415926f * i / 32.0f));
+  }
+
+  // เริ่มปล่อยสัญญาณเสียง Sine Wave 500 Hz ออกขา PA6 (ลำโพง)
+  HAL_DAC_Start(&hdac2, DAC_CHANNEL_1);
+  HAL_TIM_Base_Start_IT(&htim6);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -112,7 +187,16 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  }
+	  // อ่านค่าแรงดันเสียงจากไมโครโฟน (ขา PA0 / ADC1)
+	  HAL_ADC_Start(&hadc1);
+	  if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK) {
+	      mic_raw = HAL_ADC_GetValue(&hadc1);
+
+	      // คำนวณความแรงเสียงเทียบกับจุดกึ่งกลาง (2048)
+	      uint16_t amp = (mic_raw > 2048) ? (mic_raw - 2048) : (2048 - mic_raw);
+	      if (amp > mic_peak) mic_peak = amp; // เก็บค่าสูงสุดที่พูดดังสุด
+	  }
+	  HAL_ADC_Stop(&hadc1);
   /* USER CODE END 3 */
 }
 

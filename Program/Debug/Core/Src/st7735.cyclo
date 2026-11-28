@@ -1,0 +1,12 @@
+../Core/Src/st7735.c:13:13:ST7735_Select	2
+../Core/Src/st7735.c:18:13:ST7735_Unselect	2
+../Core/Src/st7735.c:23:13:ST7735_SetDC	2
+../Core/Src/st7735.c:28:13:ST7735_Reset	2
+../Core/Src/st7735.c:41:13:ST7735_WriteCommand	1
+../Core/Src/st7735.c:46:13:ST7735_WriteData	2
+../Core/Src/st7735.c:56:13:ST7735_SetAddressWindow	1
+../Core/Src/st7735.c:69:6:ST7735_Init	1
+../Core/Src/st7735.c:92:6:ST7735_FillRect	9
+../Core/Src/st7735.c:117:6:ST7735_FillScreen	1
+../Core/Src/st7735.c:121:6:ST7735_FillCircle	3
+../Core/Src/st7735.c:134:6:ST7735_FillRoundRect	3

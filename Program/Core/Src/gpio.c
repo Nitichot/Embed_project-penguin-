@@ -54,17 +54,22 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SPI3_RESET2_GPIO_Port, SPI3_RESET2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(SPI3_RESET2_GPIO_Port, SPI3_RESET2_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, SPI3_A01_Pin|LD2_Pin|SPI3_CS1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, SPI3_A01_Pin|LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, SPI3_A02_Pin|SPI2_CS1_Pin|Record_Bt_Pin|Mode_Bt_Pin
-                          |SPI3_RESET1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, SPI3_A02_Pin|Record_Bt_Pin|Mode_Bt_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SPI3_CS2_GPIO_Port, SPI3_CS2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, SPI2_CS1_Pin|SPI3_RESET1_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(SPI3_CS1_GPIO_Port, SPI3_CS1_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(SPI3_CS2_GPIO_Port, SPI3_CS2_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
